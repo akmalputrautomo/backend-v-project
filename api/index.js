@@ -10,18 +10,56 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Global middleware to ensure DB connection
+// Global database connection middleware dengan retry logic
+let connectionPromise = null;
+let connectionAttempts = 0;
+const MAX_ATTEMPTS = 3;
+
+async function ensureDatabaseConnection() {
+  if (getDB()) {
+    return true;
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = (async () => {
+      while (connectionAttempts < MAX_ATTEMPTS) {
+        try {
+          connectionAttempts++;
+          console.log(`🔌 Database connection attempt ${connectionAttempts}/${MAX_ATTEMPTS}`);
+          await connectDB();
+          console.log("✅ Database connected successfully");
+          return true;
+        } catch (error) {
+          console.error(`❌ Connection attempt ${connectionAttempts} failed:`, error.message);
+          if (connectionAttempts >= MAX_ATTEMPTS) {
+            throw error;
+          }
+          // Wait before retry (exponential backoff)
+          await new Promise((resolve) => setTimeout(resolve, 1000 * connectionAttempts));
+        }
+      }
+      return false;
+    })();
+  }
+
+  return connectionPromise;
+}
+
 app.use(async (req, res, next) => {
   try {
-    if (!getDB()) {
-      await connectDB();
+    // Skip health check endpoint to avoid recursive connection attempts
+    if (req.path === "/api/health") {
+      return next();
     }
+
+    await ensureDatabaseConnection();
     next();
   } catch (error) {
-    console.error("DB Connection Error:", error);
-    res.status(500).json({
-      error: "Database connection failed",
-      message: error.message,
+    console.error("DB Connection Middleware Error:", error);
+    res.status(503).json({
+      error: "Database service unavailable",
+      message: "Unable to connect to database. Please try again later.",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
@@ -30,14 +68,30 @@ app.use(async (req, res, next) => {
 app.use("/api/request", requestRoute);
 app.use("/api/comment", commentRoute);
 
-// Health check endpoint
-app.get("/api/health", (req, res) => {
-  const dbStatus = getDB() ? "connected" : "disconnected";
+// Health check endpoint (doesn't require DB for basic health)
+app.get("/api/health", async (req, res) => {
+  let dbStatus = "disconnected";
+  let dbDetails = {};
+
+  try {
+    const db = getDB();
+    if (db) {
+      await db.command({ ping: 1 });
+      dbStatus = "connected";
+    }
+  } catch (error) {
+    dbStatus = "error";
+    dbDetails.error = error.message;
+  }
+
   res.json({
     status: "OK",
     database: dbStatus,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    mongodb_uri_configured: !!process.env.MONGODB_URI,
+    db_name: process.env.DB_NAME,
+    ...dbDetails,
   });
 });
 
@@ -47,6 +101,7 @@ app.get("/", (req, res) => {
     message: "V-Project Band API Ready 🚀",
     version: "1.0.0",
     database: process.env.DB_NAME || "v_project_db",
+    status: getDB() ? "database_connected" : "database_connecting",
     endpoints: {
       requests: {
         list: "GET /api/request",
@@ -83,14 +138,20 @@ app.use((req, res) => {
   });
 });
 
-// Connect to database on server start (for local development)
+// Untuk production (Vercel), cukup export app
+// Untuk local development, start server
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
-  connectDB().then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`🚀 Server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("Failed to connect to database on startup:", err);
+      process.exit(1);
     });
-  });
 }
 
 // Export for Vercel

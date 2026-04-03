@@ -8,10 +8,15 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const db = getDB();
+    if (!db) {
+      return res.status(503).json({
+        error: "Database not ready",
+        message: "Database connection is being established. Please try again.",
+      });
+    }
+
     const collection = db.collection("requests");
-
     const data = await collection.find({ deleted: 0 }).sort({ timestamp: -1 }).toArray();
-
     res.json(data);
   } catch (err) {
     console.error("GET /request error:", err);
@@ -23,8 +28,14 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const db = getDB();
-    const collection = db.collection("requests");
+    if (!db) {
+      return res.status(503).json({
+        error: "Database not ready",
+        message: "Database connection is being established. Please try again.",
+      });
+    }
 
+    const collection = db.collection("requests");
     const data = await collection.findOne({
       id: req.params.id,
       deleted: 0,
@@ -51,6 +62,13 @@ router.post("/", async (req, res) => {
 
   try {
     const db = getDB();
+    if (!db) {
+      return res.status(503).json({
+        error: "Database not ready",
+        message: "Database connection is being established. Please try again.",
+      });
+    }
+
     const collection = db.collection("requests");
 
     const newData = {
@@ -70,10 +88,17 @@ router.post("/", async (req, res) => {
   }
 });
 
-// SOFT DELETE
+// SOFT DELETE request
 router.delete("/:id", async (req, res) => {
   try {
     const db = getDB();
+    if (!db) {
+      return res.status(503).json({
+        error: "Database not ready",
+        message: "Database connection is being established. Please try again.",
+      });
+    }
+
     const collection = db.collection("requests");
 
     const result = await collection.updateOne({ id: req.params.id }, { $set: { deleted: 1, deleted_at: new Date().toISOString() } });
@@ -95,6 +120,13 @@ router.put("/:id", async (req, res) => {
 
   try {
     const db = getDB();
+    if (!db) {
+      return res.status(503).json({
+        error: "Database not ready",
+        message: "Database connection is being established. Please try again.",
+      });
+    }
+
     const collection = db.collection("requests");
 
     const updateData = {};
