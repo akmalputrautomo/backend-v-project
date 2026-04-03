@@ -1,54 +1,120 @@
 import express from "express";
 import { v4 as uuid } from "uuid";
-import db from "../db.js";
+import { getDB } from "../db.js";
 
 const router = express.Router();
 
-/**
- * GET all request
- */
-router.get("/", (req, res) => {
-  const data = db.prepare("SELECT * FROM requests WHERE deleted = 0 ORDER BY timestamp DESC").all();
+// GET all requests (not deleted)
+router.get("/", async (req, res) => {
+  try {
+    const db = getDB();
+    const collection = db.collection("requests");
 
-  res.json(data);
+    const data = await collection.find({ deleted: 0 }).sort({ timestamp: -1 }).toArray();
+
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal ambil data" });
+  }
 });
 
-/**
- * POST new request
- */
-router.post("/", (req, res) => {
+// GET single request by ID
+router.get("/:id", async (req, res) => {
+  try {
+    const db = getDB();
+    const collection = db.collection("requests");
+
+    const data = await collection.findOne({
+      id: req.params.id,
+      deleted: 0,
+    });
+
+    if (!data) {
+      return res.status(404).json({ error: "Request tidak ditemukan" });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal ambil data" });
+  }
+});
+
+// POST new request
+router.post("/", async (req, res) => {
   const { song_title, artist_name, requester_name } = req.body;
 
   if (!song_title || !artist_name || !requester_name) {
     return res.status(400).json({ message: "Data tidak lengkap" });
   }
 
-  const newData = {
-    id: uuid(),
-    song_title,
-    artist_name,
-    requester_name,
-    timestamp: new Date().toISOString(),
-    deleted: 0,
-  };
+  try {
+    const db = getDB();
+    const collection = db.collection("requests");
 
-  db.prepare(
-    ` INSERT INTO requests 
- (id, song_title, artist_name, requester_name, timestamp, deleted)
- VALUES (@id, @song_title, @artist_name, @requester_name, @timestamp, @deleted)
- `,
-  ).run(newData);
+    const newData = {
+      id: uuid(),
+      song_title,
+      artist_name,
+      requester_name,
+      timestamp: new Date().toISOString(),
+      deleted: 0,
+    };
 
-  res.status(201).json(newData);
+    await collection.insertOne(newData);
+    res.status(201).json(newData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal tambah request" });
+  }
 });
 
-/**
- * SOFT DELETE (ADMIN)
- */
-router.delete("/:id", (req, res) => {
-  db.prepare("UPDATE requests SET deleted = 1 WHERE id = ?").run(req.params.id);
+// SOFT DELETE
+router.delete("/:id", async (req, res) => {
+  try {
+    const db = getDB();
+    const collection = db.collection("requests");
 
-  res.json({ success: true });
+    const result = await collection.updateOne({ id: req.params.id }, { $set: { deleted: 1 } });
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Request tidak ditemukan" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal hapus request" });
+  }
+});
+
+// UPDATE request
+router.put("/:id", async (req, res) => {
+  const { song_title, artist_name, requester_name } = req.body;
+
+  try {
+    const db = getDB();
+    const collection = db.collection("requests");
+
+    const updateData = {};
+    if (song_title) updateData.song_title = song_title;
+    if (artist_name) updateData.artist_name = artist_name;
+    if (requester_name) updateData.requester_name = requester_name;
+    updateData.updated_at = new Date().toISOString();
+
+    const result = await collection.updateOne({ id: req.params.id, deleted: 0 }, { $set: updateData });
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Request tidak ditemukan" });
+    }
+
+    const updated = await collection.findOne({ id: req.params.id });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Gagal update request" });
+  }
 });
 
 export default router;
