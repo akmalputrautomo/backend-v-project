@@ -14,8 +14,8 @@ router.get("/", async (req, res) => {
 
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal ambil data" });
+    console.error("GET /request error:", err);
+    res.status(500).json({ error: "Gagal ambil data", message: err.message });
   }
 });
 
@@ -36,8 +36,8 @@ router.get("/:id", async (req, res) => {
 
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal ambil data" });
+    console.error("GET /request/:id error:", err);
+    res.status(500).json({ error: "Gagal ambil data", message: err.message });
   }
 });
 
@@ -46,7 +46,7 @@ router.post("/", async (req, res) => {
   const { song_title, artist_name, requester_name } = req.body;
 
   if (!song_title || !artist_name || !requester_name) {
-    return res.status(400).json({ message: "Data tidak lengkap" });
+    return res.status(400).json({ error: "Data tidak lengkap" });
   }
 
   try {
@@ -65,8 +65,8 @@ router.post("/", async (req, res) => {
     await collection.insertOne(newData);
     res.status(201).json(newData);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal tambah request" });
+    console.error("POST /request error:", err);
+    res.status(500).json({ error: "Gagal tambah request", message: err.message });
   }
 });
 
@@ -76,16 +76,16 @@ router.delete("/:id", async (req, res) => {
     const db = getDB();
     const collection = db.collection("requests");
 
-    const result = await collection.updateOne({ id: req.params.id }, { $set: { deleted: 1 } });
+    const result = await collection.updateOne({ id: req.params.id }, { $set: { deleted: 1, deleted_at: new Date().toISOString() } });
 
     if (result.matchedCount === 0) {
       return res.status(404).json({ error: "Request tidak ditemukan" });
     }
 
-    res.json({ success: true });
+    res.json({ success: true, message: "Request berhasil dihapus" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal hapus request" });
+    console.error("DELETE /request/:id error:", err);
+    res.status(500).json({ error: "Gagal hapus request", message: err.message });
   }
 });
 
@@ -112,8 +112,8 @@ router.put("/:id", async (req, res) => {
     const updated = await collection.findOne({ id: req.params.id });
     res.json(updated);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal update request" });
+    console.error("PUT /request/:id error:", err);
+    res.status(500).json({ error: "Gagal update request", message: err.message });
   }
 });
 

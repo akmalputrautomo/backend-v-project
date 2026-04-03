@@ -1,101 +1,90 @@
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 
+// Load environment variables
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.DB_NAME || "v_project_db";
 
-let db = null;
-let client = null;
+let cachedClient = null;
+let cachedDb = null;
 
 export async function connectDB() {
-  if (db) return db;
+  // Use cached connection if available
+  if (cachedDb) {
+    return cachedDb;
+  }
+
+  if (!uri) {
+    throw new Error("MONGODB_URI is not defined in environment variables");
+  }
 
   try {
-    console.log("🔄 Connecting to MongoDB Atlas...");
-    console.log("📡 Connecting to cluster...");
+    console.log("🔄 Connecting to MongoDB...");
 
-    // Optional: Add connection options for better stability
-    client = new MongoClient(uri, {
+    const client = new MongoClient(uri, {
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 10000,
     });
 
     await client.connect();
-    console.log("✅ Connected to MongoDB Atlas successfully!");
+    console.log("✅ Connected to MongoDB successfully!");
 
-    db = client.db(dbName);
+    const db = client.db(dbName);
     console.log(`📚 Using database: ${dbName}`);
 
-    // Test the connection with ping
+    // Test connection
     await db.command({ ping: 1 });
     console.log("🏓 Database ping successful");
 
     // Create indexes
-    await createIndexes();
+    await createIndexes(db);
+
+    // Cache connection
+    cachedClient = client;
+    cachedDb = db;
 
     return db;
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
-    console.log("\n💡 Troubleshooting tips:");
-    console.log("1. Check your internet connection");
-    console.log("2. Verify MongoDB Atlas is running");
-    console.log("3. Check Network Access in MongoDB Atlas");
-    console.log("4. Verify username/password in connection string");
-    console.log("5. Try using encoded password if contains special characters");
     throw error;
   }
 }
 
-async function createIndexes() {
-  if (!db) return;
-
+async function createIndexes(db) {
   try {
     const requestsCollection = db.collection("requests");
     const commentsCollection = db.collection("comments");
 
-    // Create indexes for better query performance
+    // Create indexes if they don't exist
     await requestsCollection.createIndex({ timestamp: -1 });
     await requestsCollection.createIndex({ deleted: 1 });
     await requestsCollection.createIndex({ id: 1 }, { unique: true });
+
     await commentsCollection.createIndex({ request_id: 1 });
     await commentsCollection.createIndex({ timestamp: 1 });
     await commentsCollection.createIndex({ id: 1 }, { unique: true });
 
-    console.log("✅ Indexes created successfully");
+    console.log("✅ Indexes created/verified successfully");
   } catch (error) {
     console.warn("⚠️ Index creation warning:", error.message);
   }
 }
 
 export async function closeDB() {
-  if (client) {
-    await client.close();
+  if (cachedClient) {
+    await cachedClient.close();
+    cachedClient = null;
+    cachedDb = null;
     console.log("🔒 MongoDB connection closed");
   }
 }
 
 export function getDB() {
-  if (!db) {
+  if (!cachedDb) {
     throw new Error("Database not connected. Call connectDB() first.");
   }
-  return db;
-}
-
-// Test connection function
-export async function testConnection() {
-  try {
-    const db = await connectDB();
-    const collections = await db.listCollections().toArray();
-    console.log(
-      "📊 Available collections:",
-      collections.map((c) => c.name),
-    );
-    return true;
-  } catch (error) {
-    console.error("Connection test failed:", error);
-    return false;
-  }
+  return cachedDb;
 }

@@ -38,8 +38,8 @@ router.post("/", async (req, res) => {
     await commentsCollection.insertOne(newComment);
     res.status(201).json(newComment);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal tambah komentar" });
+    console.error("POST /comment error:", err);
+    res.status(500).json({ error: "Gagal tambah komentar", message: err.message });
   }
 });
 
@@ -53,8 +53,8 @@ router.get("/:request_id", async (req, res) => {
 
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal ambil komentar" });
+    console.error("GET /comment/:request_id error:", err);
+    res.status(500).json({ error: "Gagal ambil komentar", message: err.message });
   }
 });
 
@@ -70,10 +70,10 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Komentar tidak ditemukan" });
     }
 
-    res.json({ success: true });
+    res.json({ success: true, message: "Komentar berhasil dihapus" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal hapus komentar" });
+    console.error("DELETE /comment/:id error:", err);
+    res.status(500).json({ error: "Gagal hapus komentar", message: err.message });
   }
 });
 
@@ -106,8 +106,8 @@ router.put("/:id", async (req, res) => {
     const updated = await collection.findOne({ id: req.params.id });
     res.json(updated);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal update komentar" });
+    console.error("PUT /comment/:id error:", err);
+    res.status(500).json({ error: "Gagal update komentar", message: err.message });
   }
 });
 
