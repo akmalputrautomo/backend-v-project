@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGODB;
 const dbName = process.env.DB_NAME || "v_project_db";
 
 let cachedClient = null;
